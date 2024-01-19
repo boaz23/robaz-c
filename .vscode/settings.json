@@ -1,6 +1,9 @@
 {
 	"files.associations": {
 		"*.h": "c",
-		"*.c": "c"
+		"*.c": "c",
+		"makefiles/Makefile-tests": "makefile",
 	},
+	"cmake.configureOnOpen": false,
+	"C_Cpp.errorSquiggles": "enabled",
 }

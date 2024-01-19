@@ -7,8 +7,5 @@ MY_MAKEFLAGS =\
 all clean:
 	$(MAKE) $(MY_MAKEFLAGS) -f makefiles/Makefile $@
 
-# tests:
-# 	$(MAKE) -Imakefiles/ -f makefiles/Makefile-tests test
-
-# tests_clean:
-# 	$(MAKE) -Imakefiles/ -f makefiles/Makefile-tests clean
+run_tests:
+	$(MAKE) $(MY_MAKEFLAGS) -f makefiles/Makefile-tests run

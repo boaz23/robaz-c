@@ -1,17 +1,18 @@
 ifeq ($(OS),Windows_NT)
 	ifeq ($(shell uname -s),) # not in a bash-like shell
-		CLEANUP = del /F /Q
+		RM = del /F /Q
 		MKDIR = mkdir
 	else # in a bash-like shell, like msys
-		CLEANUP = rm -rf
+		RM    += -r
 		MKDIR = mkdir -p
 	endif
 
 	TARGET_EXTENSION_EXE        = .exe
 	TARGET_EXTENSION_LIB_STATIC = .lib
 else
-	CLEANUP = rm -rf
+	RM    += -r
 	MKDIR = mkdir -p
+
 	TARGET_EXE_EXTENSION        = 
 	TARGET_EXTENSION_LIB_STATIC = .a
 endif
@@ -37,13 +38,14 @@ CCFLAGS +=\
 	-Wundef\
 	-Wold-style-definition\
 
-DIR_PATH_SRC     = src
-DIR_PATH_SRC_IMP = $(DIR_PATH_SRC)/implementation
-DIR_PATH_SRC_IF  = $(DIR_PATH_SRC)/interface
+DIR_NAME_IMP = implementation
+DIR_NAME_IF  = interface
 
+DIR_NAME_LIBS  = libs
 DIR_PATH_BUILD = build
-DIR_NAME_OBJS  = $(DIR_PATH_SRC)/objs
-DIR_NAME_DEPS  = $(DIR_PATH_SRC)/deps
+DIR_NAME_OBJS  = objs
+DIR_NAME_DEPS  = deps
 
-OUT_TARGET_NAME = robazc$(TARGET_EXTENSION_LIB_STATIC)
-OUT_TARGET_PATH = $(DIR_PATH_BUILD)/$(OUT_TARGET_NAME)
+DEPS =
+
+print_var = $(info VAR $(1) = $($(1)))

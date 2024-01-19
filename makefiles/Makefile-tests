@@ -1,0 +1,84 @@
+include Common.mk
+include CommonObjects.mk
+include SrcObjects.mk
+
+DIR_PATH_TEST     = test
+DIR_PATH_SRC_TEST = $(DIR_PATH_TEST)
+
+DIR_PATH_UNITY          = $(DIR_PATH_TEST)/$(DIR_NAME_LIBS)/unity
+DIR_PATH_UNITY_FIXUTRES = $(DIR_PATH_UNITY)/extras/fixture
+DIR_PATH_UNITY_MEMORY   = $(DIR_PATH_UNITY)/extras/memory
+DIR_NAME_UNITY_SRC      = src
+DIR_PATH_UNITY_SRCS     =\
+	$(DIR_PATH_UNITY)/$(DIR_NAME_UNITY_SRC)\
+	$(DIR_PATH_UNITY_FIXUTRES)/$(DIR_NAME_UNITY_SRC)\
+	$(DIR_PATH_UNITY_MEMORY)/$(DIR_NAME_UNITY_SRC)
+
+$(eval $(call define_object_targets,TEST,\
+	$(DIR_PATH_SRC_TEST),\
+	$(DIR_PATH_SRC_TEST)/$(DIR_NAME_LIBS) $(DIR_PATH_SRC_TEST)/$(DIR_NAME_IMP),\
+	$(DIR_PATH_SRC_TEST)/$(DIR_NAME_IF) $(DIR_PATH_UNITY_SRCS) $(IMP_inc_dirs)\
+))
+
+$(eval $(call define_object_targets,TEST_UTILS_IMP,\
+	$(DIR_PATH_SRC_TEST)/$(DIR_NAME_IMP),\
+	,\
+	$(DIR_PATH_SRC_TEST)/$(DIR_NAME_IF) $(DIR_PATH_UNITY_SRCS) $(IMP_inc_dirs)\
+))
+
+$(eval $(call define_object_targets,TESTS_LIB_UNITY,\
+	$(DIR_PATH_UNITY_SRCS),\
+	,\
+	$(DIR_PATH_UNITY_SRCS)\
+))
+
+test_ext_name = test_%$(1)
+DIR_PATH_BUILD_TEST_EXE = $(DIR_PATH_BUILD)/$(DIR_PATH_TEST)_exe
+TEST_EXE_NAME_MAP = $(call test_ext_name,$(TARGET_EXE_EXTENSION))
+TEST_EXES = $(IMP_SRCS:$(DIR_PATH_SRC_IMP)/%.c=$(DIR_PATH_BUILD_TEST_EXE)/$(TEST_EXE_NAME_MAP))
+
+include CommonSecondaryTargets.mk
+
+.PHONY: all
+
+all: $(TEST_EXES)
+
+DIR_PATH_RESULTS = $(DIR_PATH_BUILD)/$(DIR_PATH_TEST)_results
+RESULTS_FILES = $(IMP_SRCS:$(DIR_PATH_SRC_IMP)/%.c=$(DIR_PATH_RESULTS)/$(call test_ext_name,.txt))
+
+PASSED = $$(grep -s PASS $(DIR_PATH_RESULTS)/*.txt)
+FAIL = `grep -s FAIL $(DIR_PATH_RESULTS)/*.txt`
+IGNORE = `grep -s IGNORE $(DIR_PATH_RESULTS)/*.txt`
+
+.PHONY: run
+
+get_test_results_by_status = $$(grep -s $(1) $(DIR_PATH_RESULTS)/*.txt)
+run: all $(RESULTS_FILES)
+	@echo "-----------------------\nIGNORES:\n-----------------------"
+	@echo "$(call get_test_results_by_status,IGNORE)"
+	@echo "-----------------------\nFAILURES:\n-----------------------"
+	@echo "$(call get_test_results_by_status,FAIL)"
+	@echo "\nDONE"
+
+$(RESULTS_FILES): $(DIR_PATH_RESULTS)/%.txt: $(DIR_PATH_BUILD_TEST_EXE)/%$(TARGET_EXE_EXTENSION)
+	@$(MKDIR) $(@D)
+	-./$< > $@
+
+define define_test_target_meta
+$(1)$(TARGET_EXE_EXTENSION): $(DIR_PATH_BUILD_TEST_EXE)/$$(TEST_EXE_NAME_MAP):\
+		$(DIR_PATH_BUILD)/$(DIR_NAME_DEPS)/$(DIR_PATH_TEST)/$$(call test_ext_name,.d)\
+		$(DIR_PATH_BUILD)/$(DIR_NAME_OBJS)/$(DIR_PATH_TEST)/$$(call test_ext_name,.o)\
+		$$(TEST_UTILS_IMP_OBJS)\
+		$(DIR_PATH_BUILD)/$(DIR_NAME_OBJS)/$(DIR_PATH_SRC)/$(DIR_NAME_IMP)/%.o\
+		$$(TESTS_LIB_UNITY_OBJS)
+	@$$(MKDIR) $$(@D)
+	$$(CC) -o $$@ $(2) $$(wordlist 2,$$(words $$^),$$^)
+endef
+
+define_test_target = $(eval $(call define_test_target_meta,\
+	$(DIR_PATH_BUILD_TEST_EXE)/$(1)$(TARGET_EXE_EXTENSION),\
+	$(foreach w,$(2),$(w:%=-Wl,--wrap=% ))\
+))
+
+$(call define_test_target,test_files,fgetc fseeko feof)
+$(call define_test_target,test_math,)

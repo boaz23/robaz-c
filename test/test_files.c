@@ -1,115 +1,176 @@
-
-#include <stdio.h>
-#include <unity_fixture.h>
-#include "tests_common.h"
+#include <unistd.h>
+#include <stdarg.h>
+#include "tests-common.h"
 #include "files.h"
-#include "print.h"
+#include "file-mem.h"
+#include "math-ext.h"
+
+static fileMem_t fileStub;
+#define FILE_STUB_SIZE 256U
 
 declare_real_func(fgetc);
 declare_real_func(fseeko);
 declare_real_func(feof);
 
 int wrap_func(fgetc)(FILE *file) {
-	printf_ln("fgetc called of fd %d", fileno(file));
-	return real_func(fgetc)(file);
+	return fileMem_getc((fileMem_t *)file);
 }
 
 int wrap_func(fseeko)(FILE *file, off_t offset, int whence) {
-	return real_func(fseeko)(file, offset, whence);
+	return fileMem_seeko((fileMem_t *)file, offset, whence);
 }
 
 int wrap_func(feof)(FILE *file) {
-	return real_func(feof)(file);
+	return fileMem_eof((fileMem_t *)file);
 }
 
-static void RunAllTests(void)
-{
-	// RUN_TEST_GROUP(ProductionCode);
-	// RUN_TEST_GROUP(ProductionCode2);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+static void print_char_array(const char *buffer, const char *buffer_end) {
+#pragma GCC diagnostic pop
+#define printf printfe
+	if (buffer == buffer_end) {
+		printf("<collapsed buffer>");
+	}
+	else if (buffer[0] == '\0')
+	{
+		printf("<empty>");
+	}
+	else
+	{
+		for (const char *pc = buffer; (pc < buffer_end) && *pc; pc++)
+		{
+			unsigned char c = *(unsigned char *)pc;
+			if (c == '\n')
+			{
+				printf("\\n");
+			}
+			else if (c == '\r')
+			{
+				printf("\\r");
+			}
+			else if (c == '\t')
+			{
+				printf("\\t");
+			}
+			else if ((0x20 <= c) && (c < 0x80))
+			{
+				printf("'%c'", c);
+			}
+			else
+			{
+				printf("0x%02X", c);
+			}
+
+			printf(" ");
+		}
+	}
+
+	printf("\n");
+#undef printf
 }
 
-int main(int argc, const char * argv[])
-{
-	printf_ln("Hello from test");
-	// return UnityMain(argc, argv, RunAllTests);
+TEST_GROUP(file_readline);
+TEST_SETUP(file_readline) {
+	fileMem_reset(&fileStub);
 }
 
-// int main(int argc, char *argv[]) {
-// 	if (argc < 2) {
-// 		printfe_ln("No file provided");
-// 		return 1;
-// 	}
+TEST_TEAR_DOWN(file_readline) {
+}
 
-// 	const char *file_path = argv[1];
-// 	FILE *file = fopen(file_path, "r");
-// 	if (file == NULL) {
-// 		printfe_ln("Failed to open the file '%s'", file_path);
-// 		return 2;
-// 	}
+void test_file_readline_singleLine(
+	size_t bufferSize,
+	status_t expected_status,
+	const char *fmt, const char *lineEnd, ...
+) {
+	assert(bufferSize > 0);
 
-// 	printf_ln("read '%c'", fgetc(file));
+	va_list ap;
+	va_start(ap, lineEnd);
 
-// 	// char buffer[5];
-// 	// const char *buffer_end = &buffer[sizeof(buffer)];
-// 	// status_t status = file_readline(file, buffer, sizeof(buffer));
+	size_t lineLength = fileMem_writef_appendv(&fileStub, fmt, ap);
+	size_t lineEndingLength = fileMem_writef_append(&fileStub, lineEnd);
 
-// 	// switch (status)
-// 	// {
-// 	// case STATUS_OK:
-// 	// case STATUS_EOF:
-// 	//   printf("Read");
-// 	//   if (status == STATUS_EOF)
-// 	//   {
-// 	//     printf(" (EOF)");
-// 	//   }
-// 	//   printf(": ");
-// 	//   break;
+	size_t nWritten;
+	char buffer[bufferSize];
+	status_t status = file_readline(
+		(FILE *)&fileStub, &nWritten,
+		buffer, bufferSize
+	);
 
-// 	// case STATUS_BUFFER_TOO_SMALL:
-// 	//   printfe_ln("Line too long");
-// 	//   return 3;
+	size_t expected_nWritten;
+	size_t expected_idxRead;
+	if (lineLength < bufferSize) {
+		expected_nWritten = lineLength;
+		expected_idxRead = lineLength + lineEndingLength;
+	}
+	else {
+		expected_idxRead = expected_nWritten = bufferSize - 1;
+	}
 
-// 	// case STATUS_ERROR:
-// 	//   printfe_ln("Line read error: errno=%d (%s)", errno, strerror(errno));
-// 	//   return 4;
+	TEST_ASSERT_EQUAL(expected_status, status);
+	TEST_ASSERT_EQUAL_size_t(expected_nWritten, nWritten);
+	TEST_ASSERT_EQUAL_size_t(expected_idxRead, fileStub.idxRead);
+	if (expected_nWritten > 0) {
+		TEST_ASSERT_EQUAL_CHAR_ARRAY(fileStub.buffer, buffer, expected_nWritten);
+	}
 
-// 	// default:
-// 	//   fail();
-// 	// }
+	va_end(ap);
+}
 
-// 	// if (buffer[0] == '\0')
-// 	// {
-// 	//   printf("<empty>");
-// 	// }
-// 	// else
-// 	// {
-// 	//   for (char *pc = buffer; (pc < buffer_end) && *pc; pc++)
-// 	//   {
-// 	//     unsigned char c = *(unsigned char *)pc;
-// 	//     if (c == '\r')
-// 	//     {
-// 	//       printf("\\r");
-// 	//     }
-// 	//     else if ((0x20 <= c) && (c < 0x80))
-// 	//     {
-// 	//       printf("'%c'", c);
-// 	//     }
-// 	//     else
-// 	//     {
-// 	//       printf("0x%02X", c);
-// 	//     }
+#define define_file_readline_test_singleLine(funcName, bufferSize, expected_status, fmt, lineEnd, ...)\
+	TEST(file_readline, funcName) {\
+		test_file_readline_singleLine(bufferSize, expected_status, fmt, lineEnd, ##__VA_ARGS__);\
+	}
 
-// 	//     printf(" ");
-// 	//   }
-// 	// }
+define_file_readline_test_singleLine(emptyLine_noLineEnd, 1, STATUS_EOF, "", "")
+define_file_readline_test_singleLine(emptyLine_lf, 1, STATUS_OK, "", "\n")
+define_file_readline_test_singleLine(emptyLine_crlf, 1, STATUS_OK, "", "\r\n")
+define_file_readline_test_singleLine(something_noLineEnd, 5, STATUS_EOF, "abc", "")
+define_file_readline_test_singleLine(something_lf, 5, STATUS_OK, "abc", "\n")
+define_file_readline_test_singleLine(something_crlf, 5, STATUS_OK, "abc", "\r\n")
+define_file_readline_test_singleLine(something_bufferSizeExact_noLineEnd, 4, STATUS_EOF, "abc", "")
+define_file_readline_test_singleLine(something_bufferSizeExact_lf, 4, STATUS_OK, "abc", "\n")
+define_file_readline_test_singleLine(something_bufferSizeExact_crlf, 4, STATUS_OK, "abc", "\r\n")
+define_file_readline_test_singleLine(something_bufferTooSmall_noLineEnd, 3, STATUS_BUFFER_TOO_SMALL, "abc", "")
+define_file_readline_test_singleLine(something_bufferTooSmall_lf, 3, STATUS_BUFFER_TOO_SMALL, "abc", "\n")
+define_file_readline_test_singleLine(something_bufferTooSmall_crlf, 3, STATUS_BUFFER_TOO_SMALL, "abc", "\r\n")
+define_file_readline_test_singleLine(lineBodyEndCr_noLineEnd, 5, STATUS_EOF, "ab\r", "")
+define_file_readline_test_singleLine(lineBodyEndCr_crlf, 5, STATUS_OK, "ab\r", "\r\n")
+define_file_readline_test_singleLine(lineBodyEndCr_bufferSizeExact_noLineEnd, 4, STATUS_EOF, "ab\r", "")
+define_file_readline_test_singleLine(lineBodyEndCr_bufferSizeExact_crlf, 4, STATUS_OK, "ab\r", "\r\n")
+define_file_readline_test_singleLine(lineBodyEndCr_bufferTooSmall_noLineEnd, 3, STATUS_BUFFER_TOO_SMALL, "ab\r", "")
+define_file_readline_test_singleLine(lineBodyEndCr_bufferTooSmall_noLineEnd_someChar, 3, STATUS_BUFFER_TOO_SMALL, "ab\r3", "")
 
-// 	// printf("\n");
+TEST_GROUP_RUNNER(file_readline) {
+	fileMem_init(&fileStub, FILE_STUB_SIZE);
 
-// 	if (fclose(file) < 0)
-// 	{
-// 		printfe_ln("Failed to close the file '%s'", file_path);
-// 		return 2;
-// 	}
+	RUN_TEST_CASE(file_readline, emptyLine_noLineEnd);
+	RUN_TEST_CASE(file_readline, emptyLine_lf);
+	RUN_TEST_CASE(file_readline, emptyLine_crlf);
+	RUN_TEST_CASE(file_readline, something_noLineEnd);
+	RUN_TEST_CASE(file_readline, something_lf);
+	RUN_TEST_CASE(file_readline, something_crlf);
+	RUN_TEST_CASE(file_readline, something_bufferSizeExact_noLineEnd);
+	RUN_TEST_CASE(file_readline, something_bufferSizeExact_lf);
+	RUN_TEST_CASE(file_readline, something_bufferSizeExact_crlf);
+	RUN_TEST_CASE(file_readline, something_bufferTooSmall_noLineEnd);
+	RUN_TEST_CASE(file_readline, something_bufferTooSmall_lf);
+	RUN_TEST_CASE(file_readline, something_bufferTooSmall_crlf);
+	RUN_TEST_CASE(file_readline, lineBodyEndCr_noLineEnd);
+	RUN_TEST_CASE(file_readline, lineBodyEndCr_crlf);
+	RUN_TEST_CASE(file_readline, lineBodyEndCr_bufferSizeExact_noLineEnd);
+	RUN_TEST_CASE(file_readline, lineBodyEndCr_bufferSizeExact_crlf);
+	RUN_TEST_CASE(file_readline, lineBodyEndCr_bufferTooSmall_noLineEnd);
+	RUN_TEST_CASE(file_readline, lineBodyEndCr_bufferTooSmall_noLineEnd_someChar);
 
-// 	return 0;
-// }
+	fileMem_free(&fileStub);
+}
+
+static void RunAllTests(void) {
+	RUN_TEST_GROUP(file_readline);
+}
+
+int main(int argc, const char * argv[]) {
+	return UnityMain(argc, argv, RunAllTests);
+}

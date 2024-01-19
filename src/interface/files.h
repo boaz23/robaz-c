@@ -14,6 +14,9 @@ typedef enum status
 #define file_unread(file, n)   (fseeko(file, -(n), SEEK_CUR) >= 0)
 #define file_unread_char(file) file_unread(file, 1)
 
-status_t file_readline(FILE *file, char *buffer, size_t buffer_size);
+status_t file_readline(
+  FILE *file, size_t *nWritten,
+  char *buffer, size_t bufferSize
+);
 
 #endif
